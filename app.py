@@ -45,7 +45,8 @@ def setup_connections():
         gs = gspread.authorize(creds)
         docs_service = googleapiclient.discovery.build('docs', 'v1', credentials=creds)
         genai.configure(api_key=st.secrets["gemini_api_key"]["api_key"])
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # 안정적인 API 호환성을 위해 모델을 'gemini-pro'로 변경
+        model = genai.GenerativeModel('gemini-pro')
         return gs, docs_service, model
     except Exception as e:
         st.error(f"API 연결 중 오류가 발생했습니다: {e}")
@@ -201,7 +202,13 @@ def save_submission(submissions_sheet, student_id, class_name, submission_conten
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     submission_json = json.dumps(submission_content, ensure_ascii=False)
     df = pd.DataFrame(submissions_sheet.get_all_records())
-    existing_row = df[(df['student_id'].astype(str) == str(student_id)) & (df['class_name'] == class_name)]
+
+    # [수정] 'submissions' 시트가 비어있거나 헤더가 없을 경우 KeyError 방지
+    if df.empty or 'student_id' not in df.columns or 'class_name' not in df.columns:
+        existing_row = pd.DataFrame() # 빈 데이터프레임으로 설정하여 새 행을 추가하도록 유도
+    else:
+        existing_row = df[(df['student_id'].astype(str) == str(student_id)) & (df['class_name'] == class_name)]
+
     if not existing_row.empty:
         row_index = existing_row.index[0] + 2
         submissions_sheet.update_cell(row_index, 3, timestamp)
@@ -320,4 +327,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
