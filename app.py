@@ -256,8 +256,8 @@ def main():
         st.sidebar.markdown("---")
 
         CLASS_LIST = {
-            "주제 탐구 보고서 작성": "1SOq_wJjl_7q47uALaN7PV26aF_3s-S_z_WkL_o_U-Yw",
-            "인공지능 윤리 토론 개요서": "15k_sXbapCElqQmBQuOBm-e9H3v_s0q_Z_cO-dIeF_gA"
+            "자유 낙하와 수평 방향으로 던진 물체의 운동 비교": "1AnUqkNgFwO6EwX3p3JaVhk8bOT7-TONIdT9sl-lis_U",
+            "자유 낙하와 수평 방향으로 던진 물체의 운동 비교": "1AnUqkNgFwO6EwX3p3JaVhk8bOT7-TONIdT9sl-lis_U"
         }
         st.sidebar.info("`app.py`의 `CLASS_LIST`에 수업을 추가하고, Google Docs 템플릿에 `## 활동 제목` 형식으로 내용을 구성해주세요.")
         
