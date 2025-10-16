@@ -46,7 +46,7 @@ def setup_connections():
         docs_service = googleapiclient.discovery.build('docs', 'v1', credentials=creds)
         genai.configure(api_key=st.secrets["gemini_api_key"]["api_key"])
         # 가장 보편적인 모델 이름인 'gemini-pro'로 다시 시도합니다.
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-2.5-pro')
         return gs, docs_service, model
     except Exception as e:
         st.error(f"API 연결 중 오류가 발생했습니다: {e}")
