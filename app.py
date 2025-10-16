@@ -45,8 +45,8 @@ def setup_connections():
         gs = gspread.authorize(creds)
         docs_service = googleapiclient.discovery.build('docs', 'v1', credentials=creds)
         genai.configure(api_key=st.secrets["gemini_api_key"]["api_key"])
-        # 안정적인 API 호환성을 위해 모델을 'gemini-1.0-pro'로 변경
-        model = genai.GenerativeModel('gemini-1.0-pro')
+        # 가장 보편적인 모델 이름인 'gemini-pro'로 다시 시도합니다.
+        model = genai.GenerativeModel('gemini-pro')
         return gs, docs_service, model
     except Exception as e:
         st.error(f"API 연결 중 오류가 발생했습니다: {e}")
@@ -240,6 +240,19 @@ def get_ai_feedback(model, class_name, submission_content):
         return feedback_response.text, record_response.text
     except Exception as e:
         st.error(f"Gemini API 호출 중 오류가 발생했습니다: {e}")
+        
+        # [오류 진단 기능 추가] - 문제가 계속될 경우, 사용 가능한 모델 목록을 화면에 표시합니다.
+        st.info("API가 현재 환경에서 사용 가능한 모델 목록을 확인합니다...")
+        try:
+            available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            if available_models:
+                st.warning("아래는 현재 API 키로 사용 가능한 모델 목록입니다. 만약 오류가 계속된다면 아래 목록에 있는 모델 이름 (예: models/gemini-pro)을 코드의 `genai.GenerativeModel(...)` 부분에 대신 입력해보세요.")
+                st.json(available_models)
+            else:
+                st.error("콘텐츠를 생성할 수 있는 모델을 찾을 수 없습니다. API 키 권한을 확인해주세요.")
+        except Exception as list_e:
+            st.error(f"사용 가능한 모델 목록을 가져오는 데에도 실패했습니다: {list_e}")
+            
         return "피드백 생성에 실패했습니다.", "생기부 초안 생성에 실패했습니다."
 
 # ----------------------------------------------------------------------
@@ -262,7 +275,7 @@ def main():
         st.sidebar.markdown("---")
 
         CLASS_LIST = {
-            "자유 낙하와 수평 방향으로 던진 물체의 운동 비교": "1AnUqkNgFwO6EwX3p3JaVhk8bOT7-TONIdT9sl-lis_U"
+            "자유 낙하와 수평 방향으로 던진 물체의 운동 비교" : "1AnUqkNgFwO6EwX3p3JaVhk8bOT7-TONIdT9sl-lis_U"
         }
         st.sidebar.info("`app.py`의 `CLASS_LIST`에 수업을 추가하고, Google Docs 템플릿에 `## 활동 제목` 형식으로 내용을 구성해주세요.")
         
@@ -327,6 +340,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
