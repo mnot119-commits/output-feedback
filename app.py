@@ -121,7 +121,11 @@ def get_doc_content(docs_service, document_id):
             if 'paragraph' in value:
                 elements = value.get('paragraph').get('elements')
                 for elem in elements:
-                    text += elem.get('textRun', {}).get('content', '')
+                    text_run = elem.get('textRun')
+                    if text_run:
+                        text += text_run.get('content', '')
+                # 각 문단(paragraph)이 끝난 후 줄바꿈 문자를 추가하여 구조를 유지합니다.
+                text += '\n'
         return text
     except Exception as e:
         st.error(f"Google Docs 문서를 불러오는 중 오류 발생: {e}")
@@ -255,6 +259,7 @@ def main():
         logout()
         st.sidebar.markdown("---")
 
+        # CLASS_LIST를 코드에 직접 정의하는 방식으로 되돌립니다.
         CLASS_LIST = {
             "자유 낙하와 수평 방향으로 던진 물체의 운동 비교": "1AnUqkNgFwO6EwX3p3JaVhk8bOT7-TONIdT9sl-lis_U",
             "자유 낙하와 수평 방향으로 던진 물체의 운동 비교": "1AnUqkNgFwO6EwX3p3JaVhk8bOT7-TONIdT9sl-lis_U"
@@ -333,4 +338,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
 
