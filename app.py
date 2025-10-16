@@ -45,8 +45,8 @@ def setup_connections():
         gs = gspread.authorize(creds)
         docs_service = googleapiclient.discovery.build('docs', 'v1', credentials=creds)
         genai.configure(api_key=st.secrets["gemini_api_key"]["api_key"])
-        # 안정적인 API 호환성을 위해 모델을 'gemini-pro'로 변경
-        model = genai.GenerativeModel('gemini-pro')
+        # 안정적인 API 호환성을 위해 모델을 'gemini-1.0-pro'로 변경
+        model = genai.GenerativeModel('gemini-1.0-pro')
         return gs, docs_service, model
     except Exception as e:
         st.error(f"API 연결 중 오류가 발생했습니다: {e}")
@@ -327,5 +327,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
