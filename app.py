@@ -291,8 +291,8 @@ def main():
         # 수업 목록 설정 (key: 수업 이름, value: Google Docs ID)
         # 이 부분에 선생님의 수업과 구글 문서 ID를 추가하시면 됩니다.
         CLASS_LIST = {
-            "주제 탐구 보고서 작성법": "1SOq_wJjl_7q47uALaN7PV26aF_3s-S_z_WkL_o_U-Yw",
-            "인공지능 윤리 토론 개요서": "15k_sXbapCElqQmBQuOBm-e9H3v_s0q_Z_cO-dIeF_gA"
+            "자유낙하와 수평방향으로 던진 물체의 운동": "1AnUqkNgFwO6EwX3p3JaVhk8bOT7-TONIdT9sl-lis_U",
+            "자유낙하와 수평방향으로 던진 물체의 운동": "1AnUqkNgFwO6EwX3p3JaVhk8bOT7-TONIdT9sl-lis_U"
         }
         
         # 예시 문서 안내
