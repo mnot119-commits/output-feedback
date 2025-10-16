@@ -135,21 +135,17 @@ def get_doc_content(docs_service, document_id):
 def parse_template_by_activity(template_text):
     """
     ##을 기준으로 템플릿을 파싱하여 활동별로 내용을 구조화합니다.
+    {{label}} 또는 {{label:placeholder}} 형식을 모두 지원합니다.
     """
-    # OrderedDict를 사용하여 활동 순서 보장
     activities = OrderedDict()
-    # 정규표현식: {{label:placeholder}} 형식의 입력 필드 패턴
-    input_pattern = re.compile(r'\{\{([^:]+):([^}]+)\}\}')
+    # 수정된 정규표현식: placeholder 부분을 선택적으로 만들어 {{label}} 형식도 지원
+    input_pattern = re.compile(r'\{\{([^:}]+)(?::([^}]+))?\}\}')
     
-    # "## "으로 시작하는 라인을 기준으로 텍스트 분리
     parts = re.split(r'\n## ', '\n' + template_text)
     
-    # 첫 번째 빈 부분은 무시
     for part in parts[1:]:
         lines = part.split('\n')
-        # 활동 제목은 첫 번째 라인
         activity_title = lines[0].strip()
-        # 나머지 내용은 설명 및 입력 필드
         content_text = '\n'.join(lines[1:])
         
         activity_parts = []
@@ -160,7 +156,8 @@ def parse_template_by_activity(template_text):
             activity_parts.append({'type': 'static', 'content': content_text[last_end:start]})
             
             label = match.group(1).strip()
-            placeholder = match.group(2).strip()
+            # placeholder가 없는 경우 (match.group(2)가 None) 기본값을 사용
+            placeholder = match.group(2).strip() if match.group(2) else "여기에 내용을 입력하세요."
             activity_parts.append({'type': 'input', 'label': label, 'placeholder': placeholder})
             
             last_end = end
@@ -187,7 +184,6 @@ def load_previous_submission(submissions_sheet, student_id, class_name):
 
         if not student_submissions.empty:
             latest_submission = student_submissions.sort_values(by='timestamp', ascending=False).iloc[0]
-            # submission_content가 비어있거나 유효하지 않은 JSON일 경우 처리
             content = latest_submission['submission_content']
             if content and content.strip():
                 return json.loads(content), latest_submission['feedback'], latest_submission['record_suggestion']
@@ -221,7 +217,6 @@ def save_submission(submissions_sheet, student_id, class_name, submission_conten
 # ----------------------------------------------------------------------
 def get_ai_feedback(model, class_name, submission_content):
     full_text = f"## 수업: {class_name}\n\n"
-    # 제출된 내용만 필터링하여 프롬프트 구성
     submitted_items = {k: v for k, v in submission_content.items() if v and v.strip()}
     if not submitted_items:
         return "제출된 내용이 없어 피드백을 생성할 수 없습니다.", "제출된 내용이 없어 생기부 초안을 생성할 수 없습니다."
@@ -259,14 +254,11 @@ def main():
         logout()
         st.sidebar.markdown("---")
 
-        # CLASS_LIST를 코드에 직접 정의하는 방식으로 되돌립니다.
         CLASS_LIST = {
-            "자유 낙하와 수평 방향으로 던진 물체의 운동 비교": "1AnUqkNgFwO6EwX3p3JaVhk8bOT7-TONIdT9sl-lis_U",
             "자유 낙하와 수평 방향으로 던진 물체의 운동 비교": "1AnUqkNgFwO6EwX3p3JaVhk8bOT7-TONIdT9sl-lis_U"
         }
         st.sidebar.info("`app.py`의 `CLASS_LIST`에 수업을 추가하고, Google Docs 템플릿에 `## 활동 제목` 형식으로 내용을 구성해주세요.")
         
-        # --- 1단계 사이드바: 수업 선택 ---
         class_name = st.sidebar.radio("수업 선택", list(CLASS_LIST.keys()))
         
         doc_id = CLASS_LIST[class_name]
@@ -274,28 +266,23 @@ def main():
 
         if not template_text: st.stop()
         
-        # 템플릿 파싱 및 세션 상태 초기화
         activities = parse_template_by_activity(template_text)
         if not activities:
             st.warning("템플릿 문서에서 '## '으로 시작하는 활동을 찾을 수 없습니다. 템플릿 형식을 확인해주세요.")
             st.stop()
         
-        # 수업이 바뀔 때마다 세션 상태 초기화
         if 'current_class' not in st.session_state or st.session_state.current_class != class_name:
             st.session_state.current_class = class_name
             st.session_state.submission_content, st.session_state.feedback, st.session_state.record = \
                 load_previous_submission(submissions_sheet, st.session_state['student_id'], class_name)
 
-        # --- 2단계 사이드바: 활동 선택 ---
         st.sidebar.markdown("---")
         selected_activity_title = st.sidebar.radio("활동 선택", list(activities.keys()))
         
-        # 메인 창 구성
         st.header(f"📝 {class_name}")
         st.subheader(selected_activity_title)
         st.markdown("---")
 
-        # 선택된 활동의 내용 표시
         activity_parts = activities[selected_activity_title]
         current_input_label = ""
         for part in activity_parts:
@@ -303,23 +290,19 @@ def main():
                 st.markdown(part['content'], unsafe_allow_html=True)
             elif part['type'] == 'input':
                 current_input_label = part['label']
-                # 위젯의 값을 세션 상태와 동기화
                 st.session_state.submission_content[current_input_label] = st.text_area(
                     label=part['label'],
                     value=st.session_state.submission_content.get(current_input_label, ""),
                     placeholder=part['placeholder'],
                     height=250,
-                    key=f"{class_name}_{current_input_label}" # 위젯 상태 유지를 위한 고유 키
+                    key=f"{class_name}_{current_input_label}"
                 )
         
         st.markdown("---")
-        # 제출 버튼은 모든 활동에 대해 공통으로 사용
         if st.button("전체 내용 저장 및 AI 피드백 받기", type="primary"):
-            # 현재 세션 상태에 저장된 모든 내용을 바탕으로 피드백 요청
             if any(st.session_state.submission_content.values()):
                 feedback, record_suggestion = get_ai_feedback(model, class_name, st.session_state.submission_content)
                 
-                # 결과 업데이트 및 저장
                 st.session_state.feedback = feedback
                 st.session_state.record = record_suggestion
                 save_submission(submissions_sheet, st.session_state['student_id'], class_name, st.session_state.submission_content, feedback, record_suggestion)
@@ -328,8 +311,7 @@ def main():
             else:
                 st.warning("제출할 내용이 없습니다. 하나 이상의 활동을 작성해주세요.")
 
-        # 피드백 및 생기부 기록 표시
-        if st.session_state.feedback:
+        if 'feedback' in st.session_state and st.session_state.feedback:
             with st.expander("🤖 AI 피드백 보기", expanded=True):
                 st.markdown(st.session_state.feedback)
             with st.expander("📚 생활기록부 기록 예시 보기"):
@@ -338,6 +320,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
 
