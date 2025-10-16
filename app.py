@@ -45,7 +45,9 @@ def setup_connections():
         gs = gspread.authorize(creds)
         docs_service = googleapiclient.discovery.build('docs', 'v1', credentials=creds)
         genai.configure(api_key=st.secrets["gemini_api_key"]["api_key"])
-        model = genai.GenerativeModel('gemini-2.5-pro')
+        # [수정] 안정적인 모델 이름과 JSON 출력을 위한 설정 추가
+        generation_config = {"response_mime_type": "application/json"}
+        model = genai.GenerativeModel('gemini-1.0-pro', generation_config=generation_config)
         return gs, docs_service, model
     except Exception as e:
         st.error(f"API 연결 중 오류가 발생했습니다: {e}")
@@ -68,7 +70,6 @@ def get_sheet(gs_client, sheet_name):
         elif sheet_name == "submissions":
              worksheet.append_row(["student_id", "class_name", "timestamp", "submission_content", "feedback", "record_suggestion"])
     
-    # [수정] users 시트에 password_changed 열이 없으면 추가
     if sheet_name == "users":
         headers = worksheet.row_values(1)
         if "password_changed" not in headers:
@@ -97,7 +98,6 @@ def login(users_sheet):
                     st.rerun()
                 else:
                     users_df = pd.DataFrame(users_sheet.get_all_records())
-                    # [수정] DataFrame이 비어있을 경우를 대비
                     if users_df.empty:
                         st.error("등록된 학생 정보가 없습니다.")
                         return
@@ -109,7 +109,6 @@ def login(users_sheet):
                         st.session_state['user_id'] = user_id
                         st.session_state['is_teacher'] = False
                         
-                        # [추가] 비밀번호 변경 필요 여부 확인
                         password_changed_val = user_row.get('password_changed', pd.Series(False)).iloc[0]
                         if str(password_changed_val).upper() != 'TRUE':
                             st.session_state['password_needs_change'] = True
@@ -126,9 +125,6 @@ def logout():
             del st.session_state[key]
         st.rerun()
 
-# ----------------------------------------------------------------------
-# [신규] 비밀번호 변경 UI 및 로직
-# ----------------------------------------------------------------------
 def change_password_view(users_sheet):
     """학생이 첫 로그인 시 비밀번호를 변경하도록 하는 UI를 표시합니다."""
     st.header("🔒 비밀번호 변경")
@@ -148,17 +144,17 @@ def change_password_view(users_sheet):
                 try:
                     student_id = st.session_state['user_id']
                     cell = users_sheet.find(student_id)
-                    users_sheet.update_cell(cell.row, 2, new_password) # 'password' 열 업데이트
-                    users_sheet.update_cell(cell.row, 3, 'TRUE')      # 'password_changed' 열 업데이트
+                    users_sheet.update_cell(cell.row, 2, new_password)
+                    users_sheet.update_cell(cell.row, 3, 'TRUE')
                     st.session_state['password_needs_change'] = False
                     st.success("비밀번호가 성공적으로 변경되었습니다. 이제 앱을 사용하실 수 있습니다.")
                     st.balloons()
                     st.rerun()
                 except Exception as e:
                     st.error(f"비밀번호 변경 중 오류가 발생했습니다: {e}")
+
 # ----------------------------------------------------------------------
 # 템플릿 처리 및 AI 피드백 함수
-# ... (이하 함수들은 이전과 동일하게 유지)
 # ----------------------------------------------------------------------
 def get_doc_content(docs_service, document_id):
     try:
@@ -233,21 +229,52 @@ def save_submission(submissions_sheet, student_id, class_name, submission_conten
         new_row = [student_id, class_name, timestamp, submission_json, feedback, record_suggestion]
         submissions_sheet.append_row(new_row)
 
+# [수정] API 요청을 하나로 통합한 함수
 def get_ai_feedback(model, class_name, submission_content, all_exemplars_text):
+    """하나의 API 호출로 피드백과 생기부 초안을 모두 생성합니다."""
     full_text = f"## 수업: {class_name}\n\n"
     submitted_items = {k: v for k, v in submission_content.items() if v and v.strip()}
-    if not submitted_items: return "내용 없음", "내용 없음"
-    for label, content in submitted_items.items(): full_text += f"### {label}\n{content}\n\n"
-    context_prompt = f"[교사 제공 참고자료]\n{all_exemplars_text}\n\n" if all_exemplars_text and all_exemplars_text.strip() else ""
-    feedback_prompt = f"당신은 고등학생을 지도하는 교사입니다. 아래 [학생 제출 내용]을 [교사 제공 참고자료]를 기준으로 분석하고, 건설적인 피드백을 작성해주세요.\n\n[피드백 가이드라인]\n1. 칭찬할 점\n2. 개선할 점\n3. 심화 탐구 제안\n4. 긍정적이고 격려하는 어조\n\n{context_prompt}[학생 제출 내용]\n{full_text}"
-    record_prompt = f"당신은 대한민국 고등학교 교사입니다. 아래 [학생 제출 내용]을 [교사 제공 참고자료]를 참고하여 '과목별 세부능력 및 특기사항'에 기재할 서술형 초안을 작성해주세요.\n\n[작성 가이드라인]\n1. 핵심 역량 추출 (예: 비판적 사고력, 창의적 문제 해결 능력)\n2. 과정 중심 서술\n3. 객관적 서술 ('매우 뛰어남' 등 주관적 표현 지양)\n4. 1~2 문장으로 요약\n5. '~함.', '~음.'으로 끝나는 개조식 문체\n\n{context_prompt}[학생 제출 내용]\n{full_text}"
+    if not submitted_items:
+        return "제출된 내용이 없어 피드백을 생성할 수 없습니다.", "제출된 내용이 없어 생기부 초안을 생성할 수 없습니다."
+
+    for label, content in submitted_items.items():
+        full_text += f"### {label}\n{content}\n\n"
+    
+    context_prompt = ""
+    if all_exemplars_text and all_exemplars_text.strip():
+        context_prompt = f"[교사 제공 참고자료 (모범답안/평가 기준)]\n{all_exemplars_text}\n\n"
+    
+    prompt = f"""
+당신은 대한민국 고등학교 교사로서, 학생의 제출물을 분석하고 두 가지 결과물을 JSON 형식으로 출력해야 합니다.
+
+{context_prompt}
+
+[학생 제출 내용]
+{full_text}
+
+[요청 사항]
+아래 두 항목에 대한 내용을 각각 작성하여, 반드시 다음 JSON 형식에 맞춰 한 번에 출력해주세요.
+
+{{
+  "feedback": "여기에 학생을 위한 건설적인 피드백을 작성합니다. (칭찬, 개선점, 심화 탐구 제안 포함, 격려하는 어조 사용)",
+  "record_suggestion": "여기에 '과목별 세부능력 및 특기사항'에 기재할 객관적인 서술형 초안을 작성합니다. (핵심 역량, 과정 중심, 개조식 문체 사용, 1~2문장 요약)"
+}}
+"""
     try:
-        with st.spinner("AI가 분석 중입니다..."):
-            feedback_response = model.generate_content(feedback_prompt)
-            record_response = model.generate_content(record_prompt)
-        return feedback_response.text, record_response.text
+        with st.spinner("AI가 피드백과 생기부 초안을 분석하고 있습니다..."):
+            response = model.generate_content(prompt)
+            # JSON 파싱
+            result = json.loads(response.text)
+            feedback = result.get("feedback", "피드백을 생성하지 못했습니다.")
+            record_suggestion = result.get("record_suggestion", "생기부 초안을 생성하지 못했습니다.")
+        return feedback, record_suggestion
+    except json.JSONDecodeError:
+        st.error("AI가 유효한 JSON 형식으로 응답하지 않았습니다. 일반 텍스트로 결과를 표시합니다.")
+        return response.text, "생기부 초안 생성에 실패했습니다 (JSON 파싱 오류)."
     except Exception as e:
-        return f"API 오류: {e}", f"API 오류: {e}"
+        st.error(f"Gemini API 호출 중 오류가 발생했습니다: {e}")
+        return "피드백 생성 중 오류가 발생했습니다.", "생기부 초안 생성 중 오류가 발생했습니다."
+
 
 def get_overall_assessment(model, class_name, student_id, all_submissions_text):
     prompt = f"""
@@ -268,13 +295,13 @@ def get_overall_assessment(model, class_name, student_id, all_submissions_text):
 3.  **과정 중심 서술**: '무엇을 제출했다'는 결과 나열이 아닌, '어떤 아이디어에서 출발하여 어떤 과정을 거쳐 생각을 발전시켰는지'가 드러나도록 작성해주세요.
 4.  **객관적이고 구체적인 서술**: '뛰어남', '우수함'과 같은 주관적 표현을 지양하고, 학생의 활동을 구체적으로 묘사하여 강점이 자연스럽게 드러나게 해주세요.
 5.  **문체 및 형식**: '~함.', '~음.'으로 끝나는 개조식 문체를 사용하고, 전체 내용은 2~4개의 문장으로 간결하게 요약해주세요.
-
-이제 위의 지침에 따라, 생기부에 기록할 최종 평가 의견 초안을 작성해주세요.
+6.  **결과물 형식**: 반드시 다음 JSON 형식에 맞춰 최종 평가 의견만 한 번에 출력해주세요. {{ "assessment": "여기에 최종 평가 의견을 작성합니다." }}
 """
     try:
         with st.spinner("AI가 학생의 모든 활동을 종합하여 총평을 생성하고 있습니다..."):
             response = model.generate_content(prompt)
-        return response.text
+            result = json.loads(response.text)
+            return result.get("assessment", "총평을 생성하지 못했습니다.")
     except Exception as e:
         st.error(f"종합 평가 의견 생성 중 API 오류가 발생했습니다: {e}")
         return "종합 평가 의견 생성에 실패했습니다."
@@ -390,7 +417,6 @@ def main():
     if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
         login(users_sheet)
     else:
-        # [수정] 로그인 후, 비밀번호 변경 필요 여부를 확인하여 적절한 화면으로 분기
         if st.session_state.get('is_teacher', False):
             teacher_dashboard(submissions_sheet, model)
         elif st.session_state.get('password_needs_change', False):
@@ -400,4 +426,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
