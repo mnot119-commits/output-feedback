@@ -314,7 +314,8 @@ def student_view(submissions_sheet, docs_service, model):
     logout()
     st.sidebar.markdown("---")
     CLASS_LIST = {
-        "자유 낙하와 수평 방향으로 던진 물체의 운동 비교" : "1AnUqkNgFwO6EwX3p3JaVhk8bOT7-TONIdT9sl-lis_U"
+        "자유 낙하와 수평 방향으로 던진 물체의 운동 비교" : "1AnUqkNgFwO6EwX3p3JaVhk8bOT7-TONIdT9sl-lis_U",
+        "전자기 유도" : "1U9nOSDH3EXF0dX0rvkpiTfk7w61Wy90PDWf-uM9QnHY"
     }
     if 'current_class' not in st.session_state: st.session_state.current_class = ""
     class_name = st.sidebar.radio("수업 선택", list(CLASS_LIST.keys()), key="class_selector")
